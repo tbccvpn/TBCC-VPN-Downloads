@@ -173,3 +173,19 @@ test('both release paths publish the exact GitHub permalink and official install
     assert.ok(notes.includes('<!-- tbcc-stable-source: ' + source + ' -->'));
   }
 });
+
+test('release template fills the tagged links and displays provided changelog text in all three languages', () => {
+  const translations = {
+    'zh-Hans': '改进了连接。', en: 'Reconnects after a network change.', ru: 'Обновили выбор сети.',
+  };
+  const state = read({ ...makePolicy(), notes: translations });
+  const body = releaseNotes(state);
+  for (const line of Object.values(translations)) assert.ok(body.includes(line));
+  assert.ok(body.includes('What’s new'));
+  assert.ok(body.includes('version code **15**'));
+  assert.ok(body.includes('/download/v0.4.6/SHA256SUMS.txt)'));
+  assert.doesNotMatch(body, /\{\{(?:version|changes)/);
+  const manual = releaseNotes({ ...state, source: 'manual', notes: undefined });
+  assert.doesNotMatch(manual, /What’s new|\{\{/);
+  assert.ok(manual.includes('https://vpn.tbcc.com/setup/tbcc'));
+});

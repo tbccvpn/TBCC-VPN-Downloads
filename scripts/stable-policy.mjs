@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createHash, createPublicKey, verify } from 'node:crypto';
 
 export const repository = 'tbccvpn/TBCC-VPN-Downloads';
@@ -61,7 +62,7 @@ export function readPolicy(envelope, now = Date.now(), publicKey = productionKey
     })
     .sort((a, b) => a.name.localeCompare(b.name, 'en'));
   assert.ok(seen.has('arm64-v8a') && seen.has('universal'), 'Both public download links must remain available');
-  return { source: 'policy', tag: 'v' + p.versionName, version: p.versionName, code: p.versionCode, files };
+  return { source: 'policy', tag: 'v' + p.versionName, version: p.versionName, code: p.versionCode, notes: p.notes ?? {}, files };
 }
 
 export function sumsFor(files) {
@@ -199,20 +200,28 @@ export function planRelease(state, releases) {
   return { action: 'publish', draft: existing, emptyAssetSlots, files };
 }
 
+const template = readFileSync(new URL('../RELEASE_TEMPLATE.md', import.meta.url), 'utf8');
+
 export function releaseNotes(state) {
-  const url = 'https://github.com/' + repository + '/releases/';
-  const asset = url + 'download/' + state.tag + '/';
-  return (
-    [
-      'TBCC VPN for Android **' + state.version + '** · version code **' + state.code + '** · Android **9+**.',
-      '[GitHub · This release / Этот выпуск / 此版本](' + url + 'tag/' + state.tag + ')',
-      '[TBCC VPN · Installation / Установка / 安装](https://vpn.tbcc.com/setup/tbcc)',
-      '[Android 64 位 · ARM64 · Для большинства телефонов](' + asset + 'TBCC-VPN-arm64-v8a.apk)',
-      '[通用 APK · Universal APK · Универсальный APK](' + asset + 'TBCC-VPN-universal.apk)',
-      '[SHA-256](' + asset + 'SHA256SUMS.txt)',
-      recordedMetadata(state),
-    ].join('\n\n') + '\n'
-  );
+  assert.match(state.version, /^[0-9]+\.[0-9]+\.[0-9]+$/);
+  assert.equal(state.tag, 'v' + state.version);
+  assert.ok(Number.isSafeInteger(state.code) && state.code > 0);
+  const languages = { 'zh-Hans': '简体中文', en: 'English', ru: 'Русский' };
+  const changes = [];
+  for (const [locale, name] of Object.entries(languages)) {
+    const note = state.notes?.[locale];
+    if (typeof note !== 'string' || !note.trim()) continue;
+    // Render publisher-supplied changelog text as text, including multiline form input.
+    const text = note.trim().replace(/\s+/g, ' ').replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/[\\`*_\[\]~|]/g, '\\$&')
+      .replace(/@/g, '&#64;');
+    changes.push('- **' + name + '** — ' + text);
+  }
+  let body = template;
+  if (!changes.length) body = body.replace(/^### [^\n]+\n\n\{\{changes\}\}\n\n/m, '');
+  const fields = { version: state.version, versionCode: String(state.code), changes: changes.join('\n') };
+  body = body.replace(/\{\{(version|versionCode|changes)\}\}/g, (_, key) => fields[key]);
+  return body.trimEnd() + '\n\n' + recordedMetadata(state) + '\n';
 }
 
 export function policyDecision(heads) {

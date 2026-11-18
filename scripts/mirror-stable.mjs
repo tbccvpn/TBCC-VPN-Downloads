@@ -143,7 +143,7 @@ async function reconcile(verifyOnly) {
       version = checked.version;
       verified.push(checked.file);
     }
-    const selected = { source: approval.source, tag: 'v' + version, version, code: approval.code, files: verified };
+    const selected = { source: approval.source, tag: 'v' + version, version, code: approval.code, notes: approval.notes, files: verified };
     assert.deepEqual(await authorization(), approval, 'Stable publication changed while verifying APKs');
     const before = planRelease(selected, releases());
     if (before.action === 'unchanged') return;

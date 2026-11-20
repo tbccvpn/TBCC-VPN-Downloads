@@ -10,12 +10,11 @@ import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import {
   expectedAssets,
-  manualNeeded,
   manifestUrl,
   origin,
   planRelease,
   policyDecision,
-  readPolicy,
+  publishedTagFor,  readPolicy,
   releaseNotes,
   repository,
   signer,
@@ -72,8 +71,36 @@ async function authorization() {
 function gh(args) {
   return execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, timeout: 360000 });
 }
-function releases() {
-  return JSON.parse(gh(['api', '--paginate', '--slurp', '/repos/' + repository + '/releases?per_page=100'])).flat();
+function releaseSnapshot() {
+  const endpoint = '/repos/' + repository + '/releases';
+  const rows = JSON.parse(gh(['api', '--paginate', '--slurp', endpoint + '?per_page=100'])).flat();
+  const latest = JSON.parse(gh(['api', endpoint + '/latest']));
+  assert.ok(!latest.draft && !latest.prerelease && latest.tag_name, 'Invalid public latest release');
+  // Include the latest endpoint even if the paginated list has not caught up.
+  return { releases: [...rows.filter((r) => r.tag_name !== latest.tag_name), latest], latestTag: latest.tag_name };
+}
+
+async function requireApproval(approval, readApproval = authorization) {
+  assert.deepEqual(await readApproval(), approval, 'Stable publication is no longer current');
+}
+
+const latestActions = {
+  snapshot: releaseSnapshot,
+  readApproval: authorization,
+  markLatest: (tag) => gh(['release', 'edit', tag, '--repo', repository, '--latest']),
+};
+
+export async function verifyLatest(approval, tag, verifyOnly, actions = latestActions) {
+  function currentTag() {
+    const { releases, latestTag } = actions.snapshot();
+    assert.equal(publishedTagFor(approval, releases), tag, 'The approved APKs are no longer published');
+    return latestTag;
+  }
+  if (currentTag() === tag) return;
+  assert.ok(!verifyOnly, 'GitHub /releases/latest differs from approved ' + tag);
+  await requireApproval(approval, actions.readApproval);
+  if (currentTag() !== tag) actions.markLatest(tag);
+  assert.equal(currentTag(), tag, 'GitHub /releases/latest still differs from approved ' + tag);
 }
 
 export async function fetchApk(dir, item, version, code) {
@@ -125,12 +152,9 @@ async function reconcile(verifyOnly) {
     console.log('No active 100% stable rollout. The current public release is retained.');
     return;
   }
-  const visible = releases();
-  if (
-    approval.source === 'manual'
-      ? !manualNeeded(approval, visible)
-      : planRelease(approval, visible).action === 'unchanged'
-  ) {
+  const tag = publishedTagFor(approval, releaseSnapshot().releases);
+  if (tag) {
+    await verifyLatest(approval, tag, verifyOnly);
     console.log('Current public stable release verified. Version code: ' + approval.code);
     return;
   }
@@ -144,9 +168,10 @@ async function reconcile(verifyOnly) {
       verified.push(checked.file);
     }
     const selected = { source: approval.source, tag: 'v' + version, version, code: approval.code, notes: approval.notes, files: verified };
-    assert.deepEqual(await authorization(), approval, 'Stable publication changed while verifying APKs');
-    const before = planRelease(selected, releases());
-    if (before.action === 'unchanged') return;
+    await requireApproval(approval);
+    const plan = () => planRelease(selected, releaseSnapshot().releases);
+    const before = plan();
+    if (before.action === 'unchanged') return await verifyLatest(approval, selected.tag, verifyOnly);
     if (verifyOnly) {
       console.log('Dry run: verified ' + selected.files.length + ' signed APKs for ' + selected.tag);
       return;
@@ -169,22 +194,29 @@ async function reconcile(verifyOnly) {
         notes,
       ]);
     }
-    for (const id of before.emptyAssetSlots)
-      gh(['api', '--method', 'DELETE', '/repos/' + repository + '/releases/assets/' + id]);
+    for (const id of before.emptyAssetSlots) {
+      await requireApproval(approval);
+      if (plan().emptyAssetSlots?.includes(id))
+        gh(['api', '--method', 'DELETE', '/repos/' + repository + '/releases/assets/' + id]);
+    }
     await writeFile(path.join(dir, 'SHA256SUMS.txt'), sumsFor(before.files));
-    const uploaded = new Set(before.draft?.assets.filter((a) => a.state === 'uploaded').map((a) => a.name) ?? []);
     for (const item of expectedAssets(before.files)) {
-      if (!uploaded.has(item.name))
+      await requireApproval(approval);
+      const stage = plan();
+      if (stage.action === 'unchanged') return await verifyLatest(approval, selected.tag, verifyOnly);
+      assert.ok(stage.draft, 'Expected a draft for ' + selected.tag);
+      if (!stage.draft.assets.some((a) => a.name === item.name && a.state === 'uploaded'))
         gh(['release', 'upload', selected.tag, path.join(dir, item.name), '--repo', repository]);
     }
-    const final = planRelease(selected, releases());
-    if (final.action === 'unchanged') return;
+    await requireApproval(approval);
+    const final = plan();
+    if (final.action === 'unchanged') return await verifyLatest(approval, selected.tag, verifyOnly);
     assert.ok(
       final.draft && !final.emptyAssetSlots.length && final.draft.assets.length === expectedAssets(before.files).length,
       'Incomplete draft',
     );
-    assert.deepEqual(await authorization(), approval, 'Stable publication is no longer current');
     gh(['release', 'edit', selected.tag, '--repo', repository, '--draft=false', '--latest']);
+    await verifyLatest(approval, selected.tag, true);
     console.log('Published ' + selected.tag);
   } finally {
     await rm(dir, { recursive: true, force: true });

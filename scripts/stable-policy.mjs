@@ -160,26 +160,42 @@ function published(releases) {
   return visible;
 }
 
-export function manualNeeded(catalog, releases) {
-  const visible = published(releases);
-  const matched = visible.filter((r) => publishedVersion(r) === catalog.code);
-  if (matched.length) {
-    assert.equal(matched.length, 1, 'Ambiguous public versionCode');
-    const files = recordedFiles(matched[0]);
-    assert.equal(
-      files.find((a) => a.name === manualNames[0]).sha256,
-      catalog.arm64_sha256,
-      'Official ARM64 checksum changed',
-    );
-    validateAssets(matched[0], files);
-    return false;
+function publishedAtCode(code, releases) {
+  let matched = null;
+  for (const release of published(releases)) {
+    const version = publishedVersion(release);
+    assert.ok(version <= code, 'A newer stable Android versionCode is already public');
+    if (version === code) {
+      assert.ok(!matched, 'Ambiguous public versionCode');
+      matched = release;
+    }
   }
-  assert.ok(catalog.code > Math.max(...visible.map(publishedVersion)), 'Refusing to publish an older manual release');
-  return true;
+  return matched;
+}
+
+export function publishedTagFor(approval, releases) {
+  if (approval.source !== 'manual')
+    return planRelease(approval, releases).action === 'unchanged' ? approval.tag : null;
+
+  const matched = publishedAtCode(approval.code, releases);
+  if (!matched) return null;
+  const files = recordedFiles(matched);
+  assert.equal(
+    files.find((a) => a.name === manualNames[0]).sha256,
+    approval.arm64_sha256,
+    'Official ARM64 checksum changed',
+  );
+  validateAssets(matched, files);
+  return matched.tag_name;
+}
+
+export function manualNeeded(catalog, releases) {
+  return publishedTagFor({ ...catalog, source: 'manual' }, releases) === null;
 }
 
 export function planRelease(state, releases) {
-  const visible = published(releases);
+  const current = publishedAtCode(state.code, releases);
+  assert.ok(!current || current.tag_name === state.tag, 'The published versionCode belongs to another tag');
   const existing = releases.find((r) => r.tag_name === state.tag);
   let emptyAssetSlots = [];
   let files = state.files;
@@ -193,10 +209,6 @@ export function planRelease(state, releases) {
     emptyAssetSlots = validateAssets(existing, files);
     if (!existing.draft) return { action: 'unchanged' };
   }
-  assert.ok(
-    state.code > Math.max(...visible.map(publishedVersion)),
-    'Refusing to replace a published versionCode or republish an older release',
-  );
   return { action: 'publish', draft: existing, emptyAssetSlots, files };
 }
 

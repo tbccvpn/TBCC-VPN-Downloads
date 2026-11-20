@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, sign } from 'node:crypto';
 import test from 'node:test';
+import { verifyLatest } from '../scripts/mirror-stable.mjs';
 import {
   expectedAssets,
   manualNeeded,
@@ -188,4 +189,65 @@ test('release template fills the tagged links and displays provided changelog te
   const manual = releaseNotes({ ...state, source: 'manual', notes: undefined });
   assert.doesNotMatch(manual, /What’s new|\{\{/);
   assert.ok(manual.includes('https://vpn.tbcc.com/setup/tbcc'));
+});
+
+function publishedRelease(state) {
+  return { tag_name: state.tag, body: recordedMetadata(state), draft: false, prerelease: false, assets: assets(state.files) };
+}
+
+test('a matching published tag cannot hide a newer stable release or a reused code', () => {
+  const state = read(makePolicy());
+  const current = publishedRelease(state);
+  const future = publishedRelease(read(makePolicy(16, '0.4.7')));
+  const manual = { source: 'manual', code: state.code, arm64_sha256: state.files[0].sha256 };
+  for (const other of [future, { ...future, body: current.body }]) {
+    assert.throws(() => planRelease(state, [bootstrap, current, other]));
+    assert.throws(() => manualNeeded(manual, [bootstrap, current, other]));
+  }
+  for (const other of [{ ...future, draft: true }, { ...future, prerelease: true }]) {
+    assert.equal(planRelease(state, [other, current, bootstrap]).action, 'unchanged');
+    assert.equal(manualNeeded(manual, [other, current, bootstrap]), false);
+  }
+});
+
+test('verify-only rejects a stale latest link and publish repairs the pointer without touching assets', async () => {
+  const state = read(makePolicy());
+  const current = publishedRelease(state);
+  const releases = [bootstrap, current];
+  for (const approval of [state, { source: 'manual', code: state.code, arm64_sha256: state.files[0].sha256 }]) {
+    let latestTag = bootstrap.tag_name;
+    const writes = [];
+    const actions = {
+      snapshot: () => ({ releases, latestTag }),
+      readApproval: async () => approval,
+      markLatest: (tag) => { writes.push(tag); latestTag = tag; },
+    };
+    await assert.rejects(verifyLatest(approval, state.tag, true, actions), /releases.latest/);
+    assert.deepEqual(writes, []);
+    await verifyLatest(approval, state.tag, false, actions);
+    await verifyLatest(approval, state.tag, false, actions);
+    await verifyLatest(approval, state.tag, true, actions);
+    assert.deepEqual(writes, [state.tag]);
+  }
+});
+
+test('latest repair checks approval, public versions before writing, and readback after writing', async () => {
+  const state = read(makePolicy());
+  const current = publishedRelease(state);
+  const future = publishedRelease(read(makePolicy(16, '0.4.7')));
+  for (const change of ['approval', 'before', 'after']) {
+    let writes = 0, snapshots = 0;
+    const actions = {
+      snapshot: () => {
+        snapshots++;
+        const releases = [bootstrap, current];
+        if (change === 'before' && snapshots >= 2) releases.push(future);
+        return { releases, latestTag: bootstrap.tag_name };
+      },
+      readApproval: async () => change === 'approval' ? null : state,
+      markLatest: () => { writes++; },
+    };
+    await assert.rejects(verifyLatest(state, state.tag, false, actions));
+    assert.equal(writes, change === 'after' ? 1 : 0);
+  }
 });

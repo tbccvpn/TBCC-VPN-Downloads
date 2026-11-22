@@ -28,6 +28,16 @@ An annual subscription covers one personal device for 372 days. Pay once in TBCC
 
 Годовая подписка действует на одном личном устройстве 372 дня. Оплата разовая, токенами TBCC в сети TON на сумму 10 долларов США.
 
+### 应用内更新 · In-app updates · Обновления внутри приложения
+
+支持此功能的版本可通过 TBCC 官网和 GitHub 检查更新，无需 GitHub 账户。应用会验证更新目录的 TBCC 签名、APK 校验和及安装签名。请按 Android 的提示完成安装；无需卸载应用或重新购买订阅。测试版与正式版使用各自的更新渠道。
+
+Supported app versions can check updates through TBCC and GitHub without a GitHub account. The app verifies the TBCC-signed catalog, APK checksum and installation signature. Follow Android’s installation prompts; keep the existing app and subscription. Test and public builds use separate update channels.
+
+В поддерживаемых версиях приложение проверяет обновления через TBCC и GitHub без аккаунта GitHub. Проверяются подпись каталога TBCC, контрольная сумма APK и подпись приложения. Следуйте подсказкам Android; удалять приложение и покупать подписку заново не требуется. Тестовые и обычные сборки обновляются по своим каналам.
+
+Каталог: ветка [`updates-v1`](https://github.com/tbccvpn/TBCC-VPN-Downloads/tree/updates-v1), файлы `android/v1/stable.json` и, после активации тестового канала, `development.json`. Workflow копирует только проверенные подписанные данные, обновляя зеркало каждые 30 минут. Приватный ключ остаётся на сервере TBCC; GitHub не меняет политику выпуска. Просроченные или подменённые данные приложение отклоняет.
+
 ### Release notes · Описание выпуска
 
 [Шаблон описания релиза · Release template · 版本说明模板](RELEASE_TEMPLATE.md)

@@ -1,0 +1,63 @@
+name: Mirror signed Android update catalog
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/catalog-policy.mjs'
+      - 'scripts/mirror-catalog.mjs'
+      - 'tests/catalog-policy.test.mjs'
+      - '.github/workflows/mirror-catalog.yml'
+  schedule:
+    - cron: '19,49 * * * *'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Copy verified signed catalogs to updates-v1
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbcc-signed-update-catalog
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24.22.1'
+      - run: node --test tests/*.test.mjs
+      - run: python3 -B -m unittest discover -s tests -p test_manual_catalog.py
+  mirror:
+    needs: verify
+    if: github.repository == 'tbccvpn/TBCC-VPN-Downloads' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24.22.1'
+      - name: Mirror the existing signed policy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH: ${{ github.event_name == 'schedule' || inputs.publish }}
+        run: |
+          if [[ "$PUBLISH" == 'true' ]]; then
+            node scripts/mirror-catalog.mjs --publish
+          else
+            node scripts/mirror-catalog.mjs
+          fi

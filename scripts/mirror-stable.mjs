@@ -71,13 +71,25 @@ async function authorization() {
 function gh(args) {
   return execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, timeout: 360000 });
 }
-function releaseSnapshot() {
+export function releaseSnapshot(expectedTag, request = gh) {
   const endpoint = '/repos/' + repository + '/releases';
-  const rows = JSON.parse(gh(['api', '--paginate', '--slurp', endpoint + '?per_page=100'])).flat();
-  const latest = JSON.parse(gh(['api', endpoint + '/latest']));
+  const rows = JSON.parse(request(['api', '--paginate', '--slurp', endpoint + '?per_page=100'])).flat();
+  const latest = JSON.parse(request(['api', endpoint + '/latest']));
   assert.ok(!latest.draft && !latest.prerelease && latest.tag_name, 'Invalid public latest release');
-  // Include the latest endpoint even if the paginated list has not caught up.
-  return { releases: [...rows.filter((r) => r.tag_name !== latest.tag_name), latest], latestTag: latest.tag_name };
+  // GitHub's paginated list can lag both draft creation and asset uploads.
+  // Read our exact tag on every mutation plan; the policy still validates all
+  // immutable metadata/assets and fences newer published releases in the list.
+  let releases = [...rows.filter((r) => r.tag_name !== latest.tag_name), latest];
+  if (expectedTag) {
+    let exact;
+    try { exact = JSON.parse(request(['api', endpoint + '/tags/' + encodeURIComponent(expectedTag)])); }
+    catch (error) { if (!String(error.stderr).includes('HTTP 404')) throw error; }
+    if (exact) {
+      assert.equal(exact.tag_name, expectedTag, 'Exact release endpoint returned another tag');
+      releases = [...releases.filter(r => r.tag_name !== expectedTag), exact];
+    }
+  }
+  return { releases, latestTag: latest.tag_name };
 }
 
 async function requireApproval(approval, readApproval = authorization) {
@@ -90,9 +102,19 @@ const latestActions = {
   markLatest: (tag) => gh(['release', 'edit', tag, '--repo', repository, '--latest']),
 };
 
+/** Bounded read-after-create retry; never retries a failed policy validation. */
+export async function waitForDraft(plan, tag, wait = ms => new Promise(resolve => setTimeout(resolve, ms))) {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const stage = plan();
+    if (stage.action === 'unchanged' || stage.draft) return stage;
+    assert.ok(attempt < 9, 'Created draft is not visible for ' + tag);
+    await wait(1000);
+  }
+}
+
 export async function verifyLatest(approval, tag, verifyOnly, actions = latestActions) {
   function currentTag() {
-    const { releases, latestTag } = actions.snapshot();
+    const { releases, latestTag } = actions.snapshot(tag);
     assert.equal(publishedTagFor(approval, releases), tag, 'The approved APKs are no longer published');
     return latestTag;
   }
@@ -169,7 +191,7 @@ async function reconcile(verifyOnly) {
     }
     const selected = { source: approval.source, tag: 'v' + version, version, code: approval.code, notes: approval.notes, files: verified };
     await requireApproval(approval);
-    const plan = () => planRelease(selected, releaseSnapshot().releases);
+    const plan = () => planRelease(selected, releaseSnapshot(selected.tag).releases);
     const before = plan();
     if (before.action === 'unchanged') return await verifyLatest(approval, selected.tag, verifyOnly);
     if (verifyOnly) {
@@ -193,6 +215,7 @@ async function reconcile(verifyOnly) {
         '--notes-file',
         notes,
       ]);
+      await waitForDraft(plan, selected.tag);
     }
     for (const id of before.emptyAssetSlots) {
       await requireApproval(approval);

@@ -8,7 +8,7 @@
 
 支持 Android 9 及更高版本。大多数手机请选择 64 位 APK。如果不确定设备支持哪种架构，请选择通用 APK。下载后，在手机上打开文件并按照 Android 的提示安装。也可以从 [TBCC VPN 官网](https://vpn.tbcc.com/setup/tbcc) 下载。
 
-账号暂时没有 VPN 访问权限时，可打开「套餐、设备和支持」，在「每日免费试用」中点「开启今天的免费时段」。从首次开启当天起，连续 30 个自然日每天可开启一次，每次最多 60 分钟，最晚在北京时间午夜结束。断开后仍会继续计时，到期前可重新连接。
+如果账户符合免费试用条件，在新版应用中打开「我的账户」，点击「启动免费时段」。从首次开启当天起，连续 30 个自然日每天可开启一次，每次最多 60 分钟，最晚在北京时间午夜结束。断开后仍会继续计时，到期前可重新连接。
 
 年度订阅限一台个人设备，价格为 10 美元，通过 TON 网络一次性支付等值的 TBCC，有效期 372 天。
 
@@ -16,7 +16,7 @@
 
 Requires Android 9 or later. Choose the ARM64 APK for most phones, or the universal APK if you are unsure which processor your device uses. Open the downloaded file on your phone and follow the Android installation prompts. You can also download the app from the [TBCC VPN website](https://vpn.tbcc.com/setup/tbcc).
 
-If your account has no active VPN access, open the plans section and tap **Start today’s free session**. You can start one session per day for 30 consecutive calendar days, beginning on the day you first start the trial. Each session lasts up to 60 minutes and ends by midnight Beijing time. The timer keeps running if you disconnect. You can reconnect until the session ends.
+If your account is eligible for a free trial, open **My account** in the updated app and tap **Start free hour**. You can start one session per day for 30 consecutive calendar days, beginning on the day you first start the trial. Each session lasts up to 60 minutes and ends by midnight Beijing time. The timer keeps running if you disconnect. You can reconnect until the session ends.
 
 An annual subscription covers one personal device for 372 days. Pay once in TBCC on the TON network, at the equivalent of US$10.
 
@@ -24,7 +24,7 @@ An annual subscription covers one personal device for 372 days. Pay once in TBCC
 
 Требуется Android 9 или новее. Для большинства телефонов подойдёт APK для ARM64. Если не знаете архитектуру устройства, скачайте универсальный APK. Откройте скачанный файл на телефоне и следуйте подсказкам Android. Приложение также доступно на [сайте TBCC VPN](https://vpn.tbcc.com/setup/tbcc).
 
-Если в аккаунте ещё нет доступа к VPN, откройте «Тарифы, устройства и поддержка» и нажмите **«Начать бесплатный сеанс»**. Со дня первого запуска доступен один сеанс в день в течение 30 календарных дней. Он длится до 60 минут и заканчивается не позднее полуночи по Пекину. Если отключиться, таймер продолжит идти. До конца сеанса можно подключиться снова.
+Если аккаунту доступен пробный режим, в обновлённом приложении откройте **«Мой аккаунт»** и нажмите **«Запустить бесплатный час»**. Со дня первого запуска доступен один сеанс в день в течение 30 календарных дней. Он длится до 60 минут и заканчивается не позднее полуночи по Пекину. Если отключиться, таймер продолжит идти. До конца сеанса можно подключиться снова.
 
 Годовая подписка действует на одном личном устройстве 372 дня. Оплата разовая, токенами TBCC в сети TON на сумму 10 долларов США.
 
